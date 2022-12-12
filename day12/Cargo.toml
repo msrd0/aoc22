@@ -1,0 +1,12 @@
+[package]
+name = "day12"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[[bin]]
+name = "day12"
+path = "main.rs"
+
+[dependencies]
+anyhow = "1"
