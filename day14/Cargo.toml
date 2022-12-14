@@ -1,0 +1,13 @@
+[package]
+name = "day14"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[[bin]]
+name = "day14"
+path = "main.rs"
+
+[dependencies]
+anyhow = "1"
+chumsky = "0.8"
