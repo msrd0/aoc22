@@ -188,6 +188,31 @@ fn simulate_sand(map: &mut Map, spawner: Position, maxheight: usize) {
 	}
 }
 
+fn simulate_sand_fast(map: &mut Map, spawner: Position) {
+	let mut q = vec![spawner];
+	while let Some(mut sand) = q.last().copied() {
+		let mut moved = false;
+		if map.get(sand.x, sand.y + 1) == Tile::Air {
+			sand.y += 1;
+			moved = true;
+		} else if map.get(sand.x - 1, sand.y + 1) == Tile::Air {
+			sand.x -= 1;
+			sand.y += 1;
+			moved = true;
+		} else if map.get(sand.x + 1, sand.y + 1) == Tile::Air {
+			sand.x += 1;
+			sand.y += 1;
+			moved = true;
+		}
+		if moved {
+			q.push(sand);
+		} else {
+			map.insert(sand.x, sand.y, Tile::Sand);
+			q.remove(q.len() - 1);
+		}
+	}
+}
+
 fn main() -> anyhow::Result<()> {
 	let paths = read("input.txt")?;
 	let mut map = Map::new();
@@ -218,7 +243,7 @@ fn main() -> anyhow::Result<()> {
 	// part 2
 	map.clear_sand();
 	map.floor = Some(maxheight + 1);
-	simulate_sand(&mut map, spawner, usize::MAX);
+	simulate_sand_fast(&mut map, spawner);
 	println!("{map}");
 	println!("{}", map.count_sand());
 
