@@ -1,8 +1,12 @@
 use anyhow::anyhow;
 use chumsky::{prelude::*, text::digits};
-use std::{collections::BTreeMap, fs};
+use std::{
+	collections::{BTreeMap, HashSet},
+	fs,
+	ops::RangeInclusive
+};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct Position {
 	x: i32,
 	y: i32
@@ -69,29 +73,100 @@ fn read<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Vec<Sensor>> {
 	})
 }
 
+const LINE_Y: i32 = 2000000;
+const MAX: i32 = 4000000;
+const MIN: i32 = 0;
+
+#[derive(Debug, Default)]
+struct Row {
+	ranges: Vec<RangeInclusive<i32>>
+}
+
+impl Row {
+	fn add_range(&mut self, range: RangeInclusive<i32>) {
+		for r in &mut self.ranges {
+			// start of the new range is included
+			if range.start() >= r.start() && range.start() <= r.end() {
+				*r = *r.start() ..= *r.end().max(range.end());
+				return;
+			}
+			// end of the new range is included
+			if range.end() >= r.start() && range.end() <= r.end() {
+				*r = *r.start().min(range.start()) ..= *r.end();
+				return;
+			}
+			// new range covers the old range
+			if range.start() <= r.start() && range.end() >= r.end() {
+				*r = range;
+				return;
+			}
+		}
+		// range not part of any other range
+		self.ranges.push(range);
+	}
+
+	fn blocked(&self) -> u32 {
+		let mut blocked: u32 = 0;
+		let mut last_blocked: Option<i32> = None;
+
+		for r in &self.ranges {
+			if let Some(last_blocked) = last_blocked {
+				if *r.end() <= last_blocked {
+					continue;
+				}
+				let start = (last_blocked + 1).max(*r.start());
+				blocked += (r.end() - start + 1) as u32;
+			} else {
+				blocked = (r.end() - r.start() + 1) as u32;
+			}
+			last_blocked = Some(*r.end());
+		}
+
+		blocked
+	}
+}
+
+#[derive(Default)]
+struct Map {
+	map: BTreeMap<i32, Row>
+}
+
+impl Map {
+	fn add_x_range(&mut self, range: RangeInclusive<i32>, y: i32) {
+		let entry = self.map.entry(y).or_default();
+		entry.add_range(range.clone());
+		entry.ranges.sort_unstable_by_key(|range| *range.start());
+		//eprintln!("{:?} (added {range:?})", entry);
+	}
+
+	fn blocked(&self, y: i32) -> u32 {
+		self.map
+			.get(&y)
+			.map(|row| row.blocked())
+			.unwrap_or_default()
+	}
+}
+
 fn main() -> anyhow::Result<()> {
 	let sensors = read("input.txt")?;
 
-	// true if a sensor can reach
-	let mut line = BTreeMap::<i32, bool>::new();
-	let line_y = 2000000;
-
+	let mut map = Map::default();
+	let mut beacons_in_line = HashSet::<Position>::new();
 	for s in &sensors {
-		if s.nearest_beacon.y == line_y {
-			line.insert(s.nearest_beacon.x, false);
+		if s.nearest_beacon.y == LINE_Y {
+			beacons_in_line.insert(s.nearest_beacon);
 		}
 
 		let beacon_dist = s.pos.manhattan_dist(&s.nearest_beacon);
-		let line_dist = s.pos.y.abs_diff(line_y);
+		let line_dist = s.pos.y.abs_diff(LINE_Y);
+		//println!(" - {s:?} (dist: {beacon_dist})");
 		if line_dist > beacon_dist {
 			continue;
 		}
 		let xrange = (beacon_dist - line_dist) as i32;
-		for x in s.pos.x - xrange ..= s.pos.x + xrange {
-			line.entry(x).or_insert(true);
-		}
+		map.add_x_range(s.pos.x - xrange ..= s.pos.x + xrange, LINE_Y);
 	}
-	println!("{}", line.values().filter(|it| **it).count());
+	println!("{}", map.blocked(LINE_Y) - beacons_in_line.len() as u32);
 
 	Ok(())
 }
