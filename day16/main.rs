@@ -3,9 +3,9 @@ use chumsky::{
 	prelude::*,
 	text::{digits, ident}
 };
-use indexmap::IndexSet;
+use rayon::prelude::*;
 use std::{
-	collections::{BTreeSet, HashMap},
+	collections::{BTreeSet, HashMap, HashSet},
 	fs
 };
 
@@ -63,8 +63,7 @@ fn main() -> anyhow::Result<()> {
 	let max_open_vertices = vertices.values().filter(|v| v.flow_rate > 0).count();
 
 	let mut remaining = 30;
-	let mut q = IndexSet::new();
-	let mut next = IndexSet::new();
+	let mut q = HashSet::new();
 
 	q.insert(State {
 		vertex: "AA".into(),
@@ -75,34 +74,41 @@ fn main() -> anyhow::Result<()> {
 
 	while remaining > 0 {
 		println!(" remaining: {remaining}, q: {}", q.len());
-		while let Some(mut state) = q.pop() {
-			state.pressure += state.flow_rate;
-			if state.open.len() == max_open_vertices {
-				next.insert(state);
-				continue;
-			}
+		q = q
+			.into_par_iter()
+			.map(|mut state| {
+				let mut next = HashSet::new();
 
-			let vertex = &vertices[&state.vertex];
-			if !state.open.contains(&state.vertex) && vertex.flow_rate > 0 {
-				let mut state = state.clone();
-				state.open.insert(state.vertex.clone());
-				state.flow_rate += vertex.flow_rate;
-				next.insert(state);
-			}
+				state.pressure += state.flow_rate;
+				if state.open.len() == max_open_vertices {
+					next.insert(state);
+					return next;
+				}
 
-			for v in &vertex.adj {
-				let mut state = state.clone();
-				state.vertex = v.to_owned();
-				next.insert(state);
-			}
-		}
-		assert!(q.is_empty());
-		q = next;
-		next = IndexSet::new();
+				let vertex = &vertices[&state.vertex];
+				if !state.open.contains(&state.vertex) && vertex.flow_rate > 0 {
+					let mut state = state.clone();
+					state.open.insert(state.vertex.clone());
+					state.flow_rate += vertex.flow_rate;
+					next.insert(state);
+				}
+
+				for v in &vertex.adj {
+					let mut state = state.clone();
+					state.vertex = v.to_owned();
+					next.insert(state);
+				}
+
+				next
+			})
+			.reduce(HashSet::new, |mut acc, other| {
+				acc.extend(other.into_iter());
+				acc
+			});
 		remaining -= 1;
 	}
 
-	let max = q.iter().map(|state| state.pressure).max().unwrap();
+	let max = q.into_par_iter().map(|state| state.pressure).max().unwrap();
 	println!("{max}");
 
 	Ok(())
