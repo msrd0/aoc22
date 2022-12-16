@@ -11,3 +11,4 @@ path = "main.rs"
 [dependencies]
 anyhow = "1"
 chumsky = "0.8"
+indexmap = "1.9"
