@@ -58,20 +58,12 @@ struct State {
 	open: BTreeSet<String>
 }
 
-fn main() -> anyhow::Result<()> {
-	let vertices = read("input.txt")?;
-	let max_open_vertices = vertices.values().filter(|v| v.flow_rate > 0).count();
-
-	let mut remaining = 30;
-	let mut q = HashSet::new();
-
-	q.insert(State {
-		vertex: "AA".into(),
-		flow_rate: 0,
-		pressure: 0,
-		open: Default::default()
-	});
-
+fn bfs(
+	vertices: &HashMap<String, Vertex>,
+	max_open_vertices: usize,
+	mut q: HashSet<State>,
+	mut remaining: u32
+) -> HashSet<State> {
 	while remaining > 0 {
 		println!(" remaining: {remaining}, q: {}", q.len());
 		q = q
@@ -107,8 +99,51 @@ fn main() -> anyhow::Result<()> {
 			});
 		remaining -= 1;
 	}
+	q
+}
 
-	let max = q.into_par_iter().map(|state| state.pressure).max().unwrap();
+fn main() -> anyhow::Result<()> {
+	let vertices = read("input.txt")?;
+	let max_open_vertices = vertices.values().filter(|v| v.flow_rate > 0).count();
+
+	let mut q = HashSet::new();
+	q.insert(State {
+		vertex: "AA".into(),
+		flow_rate: 0,
+		pressure: 0,
+		open: Default::default()
+	});
+	let q = bfs(&vertices, max_open_vertices, q, 30);
+	let max = q.par_iter().map(|state| state.pressure).max().unwrap();
+	println!("{max}");
+
+	// part 2
+
+	let mut q = HashSet::new();
+	q.insert(State {
+		vertex: "AA".into(),
+		flow_rate: 0,
+		pressure: 0,
+		open: Default::default()
+	});
+	let q = bfs(&vertices, max_open_vertices, q, 26);
+
+	let mut elephant_q = HashMap::new();
+	for state in q {
+		let value: &mut u32 = elephant_q.entry(state.open).or_default();
+		*value = state.pressure.max(*value);
+	}
+	let elephant_q = elephant_q
+		.into_iter()
+		.map(|(open, pressure)| State {
+			vertex: "AA".into(),
+			flow_rate: 0,
+			pressure,
+			open
+		})
+		.collect();
+	let q = bfs(&vertices, max_open_vertices, elephant_q, 26);
+	let max = q.par_iter().map(|state| state.pressure).max().unwrap();
 	println!("{max}");
 
 	Ok(())
