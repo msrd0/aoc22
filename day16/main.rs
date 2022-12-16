@@ -5,7 +5,6 @@ use chumsky::{
 	text::{digits, ident}
 };
 use indexmap::IndexMap;
-use rayon::prelude::*;
 use std::{collections::HashMap, fs};
 
 struct Vertex {
@@ -80,47 +79,36 @@ fn bfs<'a>(
 		let q_len = q.len();
 		println!(" remaining: {remaining}, q: {}", q.len());
 
-		q = q
-			.into_par_iter()
-			.map(|(state, mut pressure)| {
-				let mut next = HashMap::new();
+		let mut next = HashMap::new();
+		for (state, mut pressure) in q {
+			pressure += state.flow_rate;
+			if state.open.len() == max_open_vertices {
+				next.insert(state, pressure);
+				continue;
+			}
 
-				pressure += state.flow_rate;
-				if state.open.len() == max_open_vertices {
-					next.insert(state, pressure);
-					return next;
-				}
+			if init_q_len != q_len && state.vertex == "AA" && state.flow_rate == 0 {
+				//eprintln!("skipping {state:?}");
+				continue;
+			}
 
-				if init_q_len != q_len && state.vertex == "AA" && state.flow_rate == 0 {
-					//eprintln!("skipping {state:?}");
-					return next;
-				}
+			let (vertex_idx, _, vertex) = vertices.get_full(state.vertex).unwrap();
+			if !state.is_open(vertex_idx) && vertex.flow_rate > 0 {
+				let mut state = state.clone();
+				state.set_open(vertex_idx);
+				state.flow_rate += vertex.flow_rate;
+				let entry = next.entry(state).or_default();
+				*entry = pressure.max(*entry);
+			}
 
-				let (vertex_idx, _, vertex) = vertices.get_full(state.vertex).unwrap();
-				if !state.is_open(vertex_idx) && vertex.flow_rate > 0 {
-					let mut state = state.clone();
-					state.set_open(vertex_idx);
-					state.flow_rate += vertex.flow_rate;
-					let entry = next.entry(state).or_default();
-					*entry = pressure.max(*entry);
-				}
-
-				for v in &vertex.adj {
-					let mut state = state.clone();
-					state.vertex = v;
-					let entry = next.entry(state).or_default();
-					*entry = pressure.max(*entry);
-				}
-
-				next
-			})
-			.reduce(HashMap::new, |mut acc, other| {
-				for (state, pressure) in other {
-					let entry = acc.entry(state).or_default();
-					*entry = pressure.max(*entry);
-				}
-				acc
-			});
+			for v in &vertex.adj {
+				let mut state = state.clone();
+				state.vertex = v;
+				let entry = next.entry(state).or_default();
+				*entry = pressure.max(*entry);
+			}
+		}
+		q = next;
 		remaining -= 1;
 	}
 	q
@@ -140,7 +128,7 @@ fn main() -> anyhow::Result<()> {
 		0
 	);
 	let q = bfs(&vertices, max_open_vertices, q, 30);
-	let max = q.par_iter().map(|(_, pressure)| pressure).max().unwrap();
+	let max = q.iter().map(|(_, pressure)| pressure).max().unwrap();
 	println!("{max}");
 
 	// part 2
@@ -167,7 +155,7 @@ fn main() -> anyhow::Result<()> {
 		*value = pressure.max(*value);
 	}
 	let q = bfs(&vertices, max_open_vertices, elephant_q, 26);
-	let max = q.par_iter().map(|(_, pressure)| pressure).max().unwrap();
+	let max = q.iter().map(|(_, pressure)| pressure).max().unwrap();
 	println!("{max}");
 
 	Ok(())
