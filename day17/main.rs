@@ -1,10 +1,6 @@
 use aoc22::read;
 use chumsky::prelude::*;
-use std::{
-	collections::VecDeque,
-	fmt::{self, Debug, Display, Formatter},
-	ops::Range
-};
+use std::fmt::{self, Debug, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Direction {
@@ -36,62 +32,71 @@ fn parser() -> impl Parser<char, Wind, Error = Simple<char>> {
 	.map(|wind| Wind(wind, 0))
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-enum Tile {
-	#[default]
-	Free,
-	Rock(u8),
-	Bottom
-}
-
-impl Display for Tile {
-	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		match self {
-			Self::Free => f.write_str("  "),
-			Self::Rock(color) => write!(f, "\x1B[{}m██\x1B[0m", 31 + color),
-			Self::Bottom => f.write_str("_")
-		}
-	}
-}
-
 struct Tetris {
-	rows: VecDeque<[Tile; 7]>
+	heights: [usize; 7],
+	colors: [Option<u8>; 7],
+	max_height: usize
 }
 
 impl Tetris {
 	fn new() -> Self {
 		Self {
-			rows: VecDeque::new()
+			heights: [0; 7],
+			colors: [None; 7],
+			max_height: 0
 		}
 	}
 
-	fn row(&self, y: usize) -> &[Tile; 7] {
+	fn is_free(&self, x: usize, y: usize) -> bool {
+		self.heights[x] >= y
+	}
+
+	fn new_row(&mut self) {
+		self.max_height += 1;
+		for h in self.heights.iter_mut() {
+			*h += 1;
+		}
+	}
+
+	fn occupy(&mut self, rock: Rock, x: usize, y: usize) {
 		if y == 0 {
-			return &[Tile::Free; 7];
+			panic!("Did you mean to call new_row()?");
 		}
-		let y = y - 1;
-		if y >= self.rows.len() {
-			return &[Tile::Bottom; 7];
+		if !self.is_free(x, y) {
+			panic!("{x}, {y} is already occupied");
 		}
-		&self.rows[y]
-	}
-
-	fn row_mut(&mut self, y: usize) -> &mut [Tile; 7] {
-		if y < 1 || y > self.rows.len() {
-			panic!("Index {y} out of bounds");
-		}
-		&mut self.rows[y - 1]
+		self.heights[x] = self.heights[x].min(y - 1);
+		self.colors[x] = Some(rock as u8);
+		debug_assert!(!self.is_free(x, y));
 	}
 }
 
 impl Debug for Tetris {
+	#[allow(clippy::comparison_chain)]
 	fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-		for row in &self.rows {
-			writeln!(
-				f,
-				"│{}{}{}{}{}{}{}│",
-				row[0], row[1], row[2], row[3], row[4], row[5], row[6]
-			)?;
+		write!(f, "│")?;
+		for x in 0 .. 7 {
+			write!(f, "{:2}", self.heights[x])?;
+		}
+		writeln!(f, "│")?;
+		for y in 0 .. self.max_height {
+			let mut last = true;
+			write!(f, "│")?;
+			for x in 0 .. 7 {
+				if y < self.heights[x] {
+					write!(f, "  ")?;
+					last = false;
+				} else if y == self.heights[x] {
+					write!(f, "\x1B[{}m██\x1B[0m", 31 + self.colors[x].unwrap())?;
+					last = false;
+				} else {
+					write!(f, "??")?;
+				}
+			}
+			writeln!(f, "│")?;
+			if last {
+				break;
+			}
 		}
 		f.write_str("┕━━━━━━━━━━━━━━┙")
 	}
@@ -142,16 +147,12 @@ macro_rules! rocks {
 			}
 
 			fn intersects(self, tetris: &Tetris, x: usize, y: usize) -> bool {
-				// println!("intersects({self:?}, tetris, x={x}, y={y})");
 				let lines = self.lines();
 				let size = self.size();
 				for i in 0 .. size.height {
 					if y >= i {
-						// println!("  -> checking i={i}");
 						for j in 0 .. size.width {
-							// println!("      -> tetris.row(y-i)[x+j] = {:?}", tetris.row(y-i)[x+j]);
-							// println!("         lines[i][j] = '{}'", lines[i][j] as char);
-							if tetris.row(y-i)[x+j] != Tile::Free && lines[i][j] != b' ' {
+							if !tetris.is_free(x+j, y-i) && lines[i][j] != b' ' {
 								return true;
 							}
 						}
@@ -161,26 +162,22 @@ macro_rules! rocks {
 			}
 
 			fn freeze(self, tetris: &mut Tetris, x: usize, y: usize) {
-				// println!("freeze({self:?}, tetris, x={x}, y={y}");
 				let lines = self.lines();
 				let size = self.size();
 				for i in 0..size.height {
 					if y > i {
-						// println!("  -> Updating row {y}-{i}");
 						for j in 0..size.width {
 							if lines[i][j] != b' ' {
-								tetris.row_mut(y-i)[x+j] = Tile::Rock(self as u8);
+								tetris.occupy(self, x+j, y-i);
 							}
 						}
 					} else {
-						// println!("  -> Inserting new row");
-						let mut row = [Tile::Free; 7];
+						tetris.new_row();
 						for j in 0..size.width {
 							if lines[i][j] != b' ' {
-								row[x+j] = Tile::Rock(self as u8);
+								tetris.occupy(self, x+j, 1);
 							}
 						}
-						tetris.rows.push_front(row);
 					}
 				}
 			}
@@ -215,10 +212,8 @@ rocks! {
 }
 
 fn apply_wind(wind: &mut Wind, rock: Rock, x: &mut usize) {
-	// println!("apply_wind(wind, rock={rock:?}, x={x})");
 	let Size { width, .. } = rock.size();
 	let dir = wind.next().unwrap();
-	// println!("  -> wind is pushing {dir:?}");
 	match dir {
 		Direction::Left => *x = x.saturating_sub(1),
 		Direction::Right => {
@@ -239,6 +234,8 @@ where
 	I: Iterator<Item = usize>
 {
 	for i in range {
+		let debug = i == 58 || i == 59;
+
 		let rock = Rock::from_index(i);
 		if rock == Rock::HorizLine && wind.1 == 0 {
 			println!("Reset at i={i}");
@@ -249,21 +246,36 @@ where
 
 		let mut x: usize = 2;
 		let mut y: usize = 0;
+		if debug {
+			println!("{rock:?} starts falling at ({x}, -)");
+		}
 		for _ in 0 .. 4 {
 			apply_wind(wind, rock, &mut x);
+			if debug {
+				println!("{rock:?} was pushed to     ({x}, -)");
+			}
 		}
 		while !rock.intersects(tetris, x, y + 1) {
 			y += 1;
+			if debug {
+				println!("{rock:?} falls down to     ({x}, {y})");
+			}
 			let backup = x;
 			apply_wind(wind, rock, &mut x);
 			if rock.intersects(tetris, x, y) {
 				x = backup;
+			} else if debug {
+				println!("{rock:?} was pushed to     ({x}, {y})");
 			}
 		}
 
+		if debug {
+			println!("{rock:?} freezes at        ({x}, {y})");
+		}
 		rock.freeze(tetris, x, y);
 
-		if i == 81 {
+		if debug {
+			println!("i={i} (rock: {rock:?}):");
 			println!("{tetris:?}");
 		}
 	}
@@ -276,7 +288,7 @@ fn main() -> anyhow::Result<()> {
 	let mut idx = 2022;
 	let mut tetris = Tetris::new();
 	simulate(&mut wind, &mut tetris, 0 .. idx, false);
-	println!("{}", tetris.rows.len());
+	println!("{}", tetris.max_height);
 
 	// part 2
 	idx = simulate(&mut wind, &mut tetris, idx .., true).unwrap();
@@ -289,9 +301,9 @@ fn main() -> anyhow::Result<()> {
 		idx = 0;
 	}
 	simulate(&mut wind, &mut tetris, idx .. lcm, false);
-	let lcm_height = tetris.rows.len();
+	let lcm_height = tetris.max_height;
 	simulate(&mut wind, &mut tetris, lcm .. lcm * 2, false);
-	let lcm2_height = tetris.rows.len();
+	let lcm2_height = tetris.max_height;
 	let multiplier = 1000000000000 / lcm;
 	let rem = 1000000000000 % lcm;
 	simulate(&mut wind, &mut tetris, lcm .. lcm + rem, false);
@@ -300,10 +312,10 @@ fn main() -> anyhow::Result<()> {
 	dbg!(lcm2_height);
 	dbg!(multiplier);
 	dbg!(rem);
-	dbg!(tetris.rows.len());
+	dbg!(tetris.max_height);
 	println!(
 		"{}",
-		(lcm2_height - lcm_height) * (multiplier - 1) + tetris.rows.len()
+		(lcm2_height - lcm_height) * (multiplier - 1) + tetris.max_height
 	);
 
 	Ok(())
