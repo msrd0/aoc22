@@ -1,8 +1,7 @@
-use anyhow::anyhow;
+use aoc22::read;
 use chumsky::{prelude::*, text::digits};
 use std::{
 	collections::{BTreeMap, HashSet},
-	fs,
 	ops::RangeInclusive
 };
 
@@ -57,16 +56,6 @@ fn parser() -> impl Parser<char, Vec<Sensor>, Error = Simple<char>> {
 		.repeated()
 		.at_least(1)
 		.then_ignore(end())
-}
-
-fn read<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Vec<Sensor>> {
-	parser().parse(fs::read_to_string(path)?).map_err(|errors| {
-		anyhow!(errors
-			.into_iter()
-			.map(|err| err.to_string())
-			.collect::<Vec<_>>()
-			.join("\n"))
-	})
 }
 
 // const LINE_Y: i64 = 10;
@@ -195,7 +184,7 @@ impl Map {
 }
 
 fn main() -> anyhow::Result<()> {
-	let sensors = read("input.txt")?;
+	let sensors = read("input.txt", parser())?;
 
 	let mut map = Map::default();
 	let mut beacons_in_line = HashSet::<Position>::new();

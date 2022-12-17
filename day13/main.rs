@@ -1,6 +1,6 @@
-use anyhow::anyhow;
+use aoc22::read;
 use chumsky::{prelude::*, text::digits};
-use std::{cmp::Ordering, collections::BTreeSet, fs};
+use std::{cmp::Ordering, collections::BTreeSet};
 
 #[derive(Debug)]
 pub enum Value {
@@ -83,15 +83,7 @@ impl Ord for Value {
 }
 
 fn main() -> anyhow::Result<()> {
-	let pairs = parser()
-		.parse(fs::read_to_string("input.txt")?)
-		.map_err(|errors| {
-			anyhow!(errors
-				.into_iter()
-				.map(|err| err.to_string())
-				.collect::<Vec<_>>()
-				.join("\n"))
-		})?;
+	let pairs = read("input.txt", parser())?;
 
 	let mut sum = 0;
 	for (i, (lhs, rhs)) in pairs.iter().enumerate() {

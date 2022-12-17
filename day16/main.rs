@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use aoc22::read;
 use bit_vec::BitVec;
 use chumsky::{
 	prelude::*,
@@ -7,7 +7,6 @@ use chumsky::{
 use indexmap::IndexMap;
 use std::{
 	collections::HashMap,
-	fs,
 	hash::{Hash, Hasher}
 };
 
@@ -48,16 +47,6 @@ fn parser() -> impl Parser<char, IndexMap<String, Vertex>, Error = Simple<char>>
 		.at_least(1)
 		.then_ignore(end())
 		.map(|vec| vec.into_iter().collect())
-}
-
-fn read<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<IndexMap<String, Vertex>> {
-	parser().parse(fs::read_to_string(path)?).map_err(|errors| {
-		anyhow!(errors
-			.into_iter()
-			.map(|err| err.to_string())
-			.collect::<Vec<_>>()
-			.join("\n"))
-	})
 }
 
 #[derive(Clone, Debug, Eq)]
@@ -174,7 +163,7 @@ fn inline_edge(v: &str, vertex: &mut Vertex, edge: &Edge) {
 }
 
 fn main() -> anyhow::Result<()> {
-	let mut vertices = read("input.txt")?;
+	let mut vertices = read("input.txt", parser())?;
 
 	for v in vertices.keys().cloned().collect::<Vec<_>>() {
 		let vertex = &vertices[&v];

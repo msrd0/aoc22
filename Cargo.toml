@@ -4,6 +4,9 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
+[lib]
+path = "lib.rs"
+
 [[bin]]
 name = "day9"
 path = "day9/main.rs"

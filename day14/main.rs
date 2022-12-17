@@ -1,9 +1,8 @@
-use anyhow::anyhow;
+use aoc22::read;
 use chumsky::{prelude::*, text::digits};
 use std::{
 	collections::BTreeMap,
-	fmt::{self, Display, Formatter},
-	fs
+	fmt::{self, Display, Formatter}
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -51,16 +50,6 @@ fn parser() -> impl Parser<char, Vec<Path>, Error = Simple<char>> {
 		.repeated()
 		.at_least(1)
 		.then_ignore(end())
-}
-
-fn read<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Vec<Path>> {
-	parser().parse(fs::read_to_string(path)?).map_err(|errors| {
-		anyhow!(errors
-			.into_iter()
-			.map(|err| err.to_string())
-			.collect::<Vec<_>>()
-			.join("\n"))
-	})
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -214,7 +203,7 @@ fn simulate_sand_fast(map: &mut Map, spawner: Position) {
 }
 
 fn main() -> anyhow::Result<()> {
-	let paths = read("input.txt")?;
+	let paths = read("input.txt", parser())?;
 	let mut map = Map::new();
 	for path in paths {
 		let mut last: Option<Position> = None;
