@@ -39,6 +39,7 @@ struct Position {
 	y: i32
 }
 
+#[allow(unused_variables)]
 fn print(head: &Position, tails: &[Position], visited: &HashSet<Position>) {
 	println!();
 

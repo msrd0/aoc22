@@ -1,0 +1,35 @@
+[package]
+name = "aoc22"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[[bin]]
+name = "day9"
+path = "day9/main.rs"
+
+[[bin]]
+name = "day12"
+path = "day12/main.rs"
+
+[[bin]]
+name = "day13"
+path = "day13/main.rs"
+
+[[bin]]
+name = "day14"
+path = "day14/main.rs"
+
+[[bin]]
+name = "day15"
+path = "day15/main.rs"
+
+[[bin]]
+name = "day16"
+path = "day16/main.rs"
+
+[dependencies]
+anyhow = "1"
+bit-vec = "0.6"
+chumsky = "0.8"
+indexmap = "1.9"

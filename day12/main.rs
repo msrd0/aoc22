@@ -92,7 +92,7 @@ fn main() -> anyhow::Result<()> {
 					);
 					break 'outer;
 				},
-				Height::Height(height) => {
+				Height::Height(_) => {
 					q.push_back(Path {
 						x,
 						y,
