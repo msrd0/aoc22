@@ -35,6 +35,10 @@ path = "day16/main.rs"
 name = "day17"
 path = "day17/main.rs"
 
+[[bin]]
+name = "day18"
+path = "day18/main.rs"
+
 [dependencies]
 anyhow = "1"
 bit-vec = "0.6"
