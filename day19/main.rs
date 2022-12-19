@@ -4,7 +4,8 @@ use std::{
 	collections::{HashMap, HashSet, VecDeque},
 	fmt::{self, Debug, Formatter},
 	hash::{Hash, Hasher},
-	ops::{Add, AddAssign, Sub, SubAssign}
+	ops::{Add, AddAssign, Mul, Sub, SubAssign},
+	rc::Rc
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -81,14 +82,14 @@ fn parser() -> impl Parser<char, Vec<Blueprint>, Error = Simple<char>> {
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 struct ResourceMap {
-	ore: u64,
-	clay: u64,
-	obsidian: u64,
-	geode: u64
+	ore: u16,
+	clay: u16,
+	obsidian: u16,
+	geode: u16
 }
 
-impl From<Vec<(Resource, u64)>> for ResourceMap {
-	fn from(cost: Vec<(Resource, u64)>) -> Self {
+impl From<Vec<(Resource, u16)>> for ResourceMap {
+	fn from(cost: Vec<(Resource, u16)>) -> Self {
 		let mut map = Self::default();
 		for (res, qty) in cost {
 			match res {
@@ -140,6 +141,19 @@ impl SubAssign for ResourceMap {
 	}
 }
 
+impl Mul<u16> for ResourceMap {
+	type Output = Self;
+
+	fn mul(self, rhs: u16) -> Self::Output {
+		Self {
+			ore: self.ore * rhs,
+			clay: self.clay * rhs,
+			obsidian: self.obsidian * rhs,
+			geode: self.geode * rhs
+		}
+	}
+}
+
 impl ResourceMap {
 	fn ge(self, rhs: Self) -> bool {
 		self.ore >= rhs.ore
@@ -155,7 +169,7 @@ struct State<'a> {
 	parent: Option<Box<State<'a>>>,
 	robots: ResourceMap,
 	resources: ResourceMap,
-	remaining: u64
+	remaining: u16
 }
 
 impl Debug for State<'_> {
@@ -224,14 +238,14 @@ impl<'a> State<'a> {
 }
 
 struct Queue<'a> {
-	q: VecDeque<State<'a>>,
-	inserted: HashSet<State<'a>>
+	q: VecDeque<Rc<State<'a>>>,
+	inserted: HashSet<Rc<State<'a>>>
 }
 
 impl<'a> Queue<'a> {
 	fn new(initial: State<'a>) -> Self {
 		let mut q = VecDeque::new();
-		q.push_back(initial);
+		q.push_back(Rc::new(initial));
 		Self {
 			q,
 			inserted: HashSet::new()
@@ -242,10 +256,13 @@ impl<'a> Queue<'a> {
 		if self.inserted.contains(&state) {
 			return;
 		}
-		let mut parentless = state.clone();
-		parentless.parent = None;
-		self.inserted.insert(parentless);
+		let state = Rc::new(state);
+		self.inserted.insert(Rc::clone(&state));
 		self.q.push_back(state);
+	}
+
+	fn pop(&mut self) -> Option<State<'a>> {
+		self.q.pop_front().map(|rc| State::clone(&rc))
 	}
 }
 
@@ -255,7 +272,7 @@ fn build_robots<'a>(q: &mut Queue<'a>, state: State<'a>, resources: ResourceMap)
 		if !resources.ge(*cost) {
 			continue;
 		}
-		let resources = resources - *cost;
+		//let resources = resources - *cost;
 		state.resources -= *cost;
 		match res {
 			Resource::Ore => state.robots.ore += 1,
@@ -273,19 +290,25 @@ fn bfs(initial: State<'_>) -> State<'_> {
 	let mut q = Queue::new(initial.clone());
 	let mut best = initial;
 	let mut last = 100;
-	while let Some(mut state) = q.q.pop_front() {
+	while let Some(mut state) = q.pop() {
 		if state.remaining < last {
 			last = state.remaining;
-			println!("remaining: {last} (q: {})", q.q.len() + 1);
 			q.inserted.retain(|state| state.remaining < last);
+			println!(
+				"remaining: {last} (q: {}, {})",
+				q.q.len() + 1,
+				q.inserted.len()
+			);
 		}
 
 		let resources = state.resources;
 		state.resources += state.robots;
 		state.remaining -= 1;
 
-		if state.resources.geode > best.resources.geode {
+		let prediction = state.resources + state.robots * state.remaining;
+		if prediction.geode > best.resources.geode {
 			best = state.clone();
+			best.resources = prediction;
 		}
 		if state.remaining == 0 {
 			continue;
@@ -301,7 +324,7 @@ fn bfs(initial: State<'_>) -> State<'_> {
 			continue;
 		}
 
-		state.parent = Some(Box::new(state.clone()));
+		//state.parent = Some(Box::new(state.clone()));
 		build_robots(&mut q, state, resources);
 	}
 	best
@@ -318,7 +341,21 @@ fn main() -> anyhow::Result<()> {
 			blueprint.id, state.resources.geode
 		);
 		println!("{state:?}");
-		total += blueprint.id * state.resources.geode;
+		total += blueprint.id * state.resources.geode as u64;
+	}
+	println!("{total}");
+
+	// part 2
+	let mut total: u64 = 1;
+	for blueprint in blueprints.iter().take(3) {
+		let mut initial = State::new(blueprint);
+		initial.remaining = 32;
+		let state = bfs(initial);
+		println!(
+			"Blueprint {} has mined {} geodes",
+			blueprint.id, state.resources.geode
+		);
+		total *= state.resources.geode as u64;
 	}
 	println!("{total}");
 
