@@ -39,8 +39,13 @@ path = "day17/main.rs"
 name = "day18"
 path = "day18/main.rs"
 
+[[bin]]
+name = "day19"
+path = "day19/main.rs"
+
 [dependencies]
 anyhow = "1"
+ariadne = "0.1"
 bit-vec = "0.6"
 chumsky = "0.8"
 indexmap = "1.9"
