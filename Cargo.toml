@@ -47,6 +47,10 @@ path = "day19/main.rs"
 name = "day20"
 path = "day20/main.rs"
 
+[[bin]]
+name = "day21"
+path = "day21/main.rs"
+
 [dependencies]
 anyhow = "1"
 ariadne = "0.1"
