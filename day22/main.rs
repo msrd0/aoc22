@@ -245,10 +245,13 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	};
 
 	// perform the wrapping on the cube
+	// println!("=======");
+	// println!("x={sx}, y={sy}, facing={facing:?} => x={x}, y={y}");
 	match (sf, tf) {
-		(sf, tf) if sf == tf => {
+		(Facing::Down, Facing::Down) => {
+			debug_assert_eq!(sy, sr.y() + 49);
 			*x = sx - sr.x() + tr.x();
-			*y = sy - sr.y() + tr.y();
+			*y = tr.y();
 		},
 
 		(Facing::Left, Facing::Right) | (Facing::Right, Facing::Left) => {
@@ -268,6 +271,7 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	};
 	*facing = tf;
 	debug_assert_eq!(tr, region(*x, *y));
+	// println!("wrap_on_cube(): next would be x={x}, y={y}, facing={facing:?}");
 
 	// if we hit a wall, undo everything
 	if map.rows[*y][*x] == Tile::Wall {
@@ -291,16 +295,19 @@ where
 	let mut facing = Facing::Right;
 
 	for inst in instructions {
+		// println!("x={x}, y={y}, facing={facing:?}");
+		// println!(" == {inst:?} ==");
 		match inst {
 			Instruction::TurnClockwise => facing += 1,
 			Instruction::TurnAnticlockwise => facing += 3,
 			Instruction::Move(steps) => {
-				for _ in 0 .. *steps {
+				for _i in 0 .. *steps {
 					if !move_callback(map, &mut x, &mut y, &mut facing) {
+						// println!("    (hit wall after {_i} steps)");
 						break;
 					}
 				}
-			},
+			}
 		}
 	}
 
@@ -313,7 +320,7 @@ fn main() -> anyhow::Result<()> {
 	// part 1
 	println!("{}", run(&map, &instructions, move_plain));
 	// part 2
-	// 120345 is too high
+	// 72260 is too high
 	println!("{}", run(&map, &instructions, move_on_cube));
 
 	Ok(())
