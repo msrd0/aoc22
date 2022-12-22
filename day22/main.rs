@@ -150,10 +150,10 @@ macro_rules! regions {
 	($($region:literal: ($x:literal, $y:literal)),*) => {
 		paste! {
 			$(
-				const [<REGION_ $region _X>]: usize = $x;
-				const [<REGION_ $region _X_END>]: usize = $x + 49;
-				const [<REGION_ $region _Y>]: usize = $y;
-				const [<REGION_ $region _Y_END>]: usize = $y + 49;
+				const [<REGION_ $region _X>]: usize = $x * REGION_SIZE;
+				const [<REGION_ $region _X_END>]: usize = ($x + 1) * REGION_SIZE - 1;
+				const [<REGION_ $region _Y>]: usize = $y * REGION_SIZE;
+				const [<REGION_ $region _Y_END>]: usize = ($y + 1) * REGION_SIZE - 1;
 			)*
 
 			#[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -164,13 +164,13 @@ macro_rules! regions {
 			impl Region {
 				fn x(self) -> usize {
 					match (self) {
-						$(Region::[<Region $region>] => $x),*
+						$(Region::[<Region $region>] => [<REGION_ $region _X>]),*
 					}
 				}
 
 				fn y(self) -> usize {
 					match (self) {
-						$(Region::[<Region $region>] => $y),*
+						$(Region::[<Region $region>] => [<REGION_ $region _Y>]),*
 					}
 				}
 			}
@@ -182,7 +182,15 @@ macro_rules! regions {
 						[<REGION_ $region _X>] ..= [<REGION_ $region _X_END>],
 						[<REGION_ $region _Y>] ..= [<REGION_ $region _Y_END>]
 					) => Region::[<Region $region>],)*
-					_ => unreachable!()
+					_ => unreachable!(
+						concat!(
+							"No region at (x: {}, y: {}). These are all regions:",
+							$("\n - Region ", stringify!($region), ": ({}, {}) + {REGION_SIZE}",)*
+						),
+						x, y,
+						$([<REGION_ $region _X>], [<REGION_ $region _Y>],)+
+						REGION_SIZE=REGION_SIZE
+					)
 				}
 			}
 		}
@@ -194,13 +202,14 @@ macro_rules! regions {
 //   44
 // 5566
 // 33
+const REGION_SIZE: usize = 4;
 regions! {
-	1: (50, 0),
-	2: (100, 0),
-	4: (50, 50),
-	5: (0, 100),
-	6: (50, 100),
-	3: (0, 150)
+	1: (1, 0),
+	2: (2, 0),
+	4: (1, 1),
+	5: (0, 2),
+	6: (1, 2),
+	3: (0, 3)
 }
 
 fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) -> bool {
@@ -210,15 +219,28 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	let sf = *facing;
 	let sr = region(sx, sy);
 
-	// move on plain. if region doesn't change, we're good
+	// move on plain. if region doesn't change (care walls), we're good
 	let pres = move_plain(map, x, y, facing);
 	debug_assert_eq!(*facing, sf);
 	let pr = region(*x, *y);
 	if sr == pr {
-		return pres;
+		if pres {
+			return true;
+		}
+		// if we hit a wall while wrapping on the plane, we need to be careful
+		// when we are not at a border, the result is correct
+		match sf {
+			Facing::Right if sx % REGION_SIZE != REGION_SIZE - 1 => return pres,
+			Facing::Left if sx % REGION_SIZE != 0 => return pres,
+			Facing::Down if sy % REGION_SIZE != REGION_SIZE - 1 => return pres,
+			Facing::Up if sy % REGION_SIZE != 0 => return pres,
+			_ => {}
+		};
+		// otherwise, the next match will return pres if hitting the wall was correct
 	}
 
 	// otherwise, we might need to wrap on cube
+	println!("!! Wrapping (maybe)");
 	let (tr, tf) = match (sr, sf) {
 		(Region::Region1, Facing::Left) => (Region::Region5, Facing::Right),
 		(Region::Region1, Facing::Up) => (Region::Region3, Facing::Right),
@@ -245,18 +267,28 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	};
 
 	// perform the wrapping on the cube
-	// println!("=======");
-	// println!("x={sx}, y={sy}, facing={facing:?} => x={x}, y={y}");
+	println!("!! Wrapping (for real) from:");
+	dbgpos(sr, sx, sy, sf);
 	match (sf, tf) {
 		(Facing::Down, Facing::Down) => {
-			debug_assert_eq!(sy, sr.y() + 49);
+			debug_assert_eq!(sy, sr.y() + REGION_SIZE - 1);
 			*x = sx - sr.x() + tr.x();
 			*y = tr.y();
 		},
+		(Facing::Up, Facing::Up) => {
+			debug_assert_eq!(sy, sr.y());
+			*x = sx - sr.x() + tr.x();
+			*y = tr.y() + REGION_SIZE - 1;
+		},
 
 		(Facing::Left, Facing::Right) | (Facing::Right, Facing::Left) => {
+			debug_assert!(
+				sy - sr.y() < REGION_SIZE,
+				"Expected y position to be within the source region.\nsy={sy}, sr.y()={}, REGION_SIZE={REGION_SIZE}",
+				sr.y()
+			);
 			*x = sx - sr.x() + tr.x(); // flip right/left
-			*y = 49 - (sy - sr.y()) + tr.y(); // actual position
+			*y = REGION_SIZE - 1 - (sy - sr.y()) + tr.y(); // actual position
 		},
 
 		(Facing::Up, Facing::Right)
@@ -271,7 +303,8 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	};
 	*facing = tf;
 	debug_assert_eq!(tr, region(*x, *y));
-	// println!("wrap_on_cube(): next would be x={x}, y={y}, facing={facing:?}");
+	println!("-- Wrapped to:");
+	dbgpos(tr, *x, *y, *facing);
 
 	// if we hit a wall, undo everything
 	if map.rows[*y][*x] == Tile::Wall {
@@ -295,30 +328,44 @@ where
 	let mut facing = Facing::Right;
 
 	for inst in instructions {
-		// println!("x={x}, y={y}, facing={facing:?}");
-		// println!(" == {inst:?} ==");
+		dbgpos(region(x, y), x, y, facing);
+		println!(" == {inst:?} ==");
 		match inst {
 			Instruction::TurnClockwise => facing += 1,
 			Instruction::TurnAnticlockwise => facing += 3,
 			Instruction::Move(steps) => {
 				for _i in 0 .. *steps {
 					if !move_callback(map, &mut x, &mut y, &mut facing) {
-						// println!("    (hit wall after {_i} steps)");
+						println!("    (hit wall after {_i} steps)");
 						break;
 					}
 				}
-			}
+			},
 		}
 	}
 
+	println!(" == Result ==");
+	dbgpos(region(x, y), x, y, facing);
 	1000 * (y + 1) + 4 * (x + 1) + facing as usize
+}
+
+fn dbgpos(r: Region, x: usize, y: usize, facing: Facing) {
+	let x = x + 1;
+	let y = y + 1;
+	//println!("=======");
+	println!("Plane: x={x}, y={y}, facing={facing:?}");
+	println!(
+		"Cube: {r:?}, δx={}, δy={}, facing={facing:?}",
+		x - r.x(),
+		y - r.y()
+	);
 }
 
 fn main() -> anyhow::Result<()> {
 	let (map, instructions) = read("input.txt", parser())?;
 
 	// part 1
-	println!("{}", run(&map, &instructions, move_plain));
+	// println!("{}", run(&map, &instructions, move_plain));
 	// part 2
 	// 72260 is too high
 	println!("{}", run(&map, &instructions, move_on_cube));
