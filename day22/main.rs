@@ -202,7 +202,7 @@ macro_rules! regions {
 //   44
 // 5566
 // 33
-const REGION_SIZE: usize = 4;
+const REGION_SIZE: usize = 50;
 regions! {
 	1: (1, 0),
 	2: (2, 0),
@@ -240,7 +240,9 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	}
 
 	// otherwise, we might need to wrap on cube
-	println!("!! Wrapping (maybe)");
+	println!();
+	println!("!! Wrapping (maybe) from:");
+	dbgpos(sr, sx, sy, sf);
 	let (tr, tf) = match (sr, sf) {
 		(Region::Region1, Facing::Left) => (Region::Region5, Facing::Right),
 		(Region::Region1, Facing::Up) => (Region::Region3, Facing::Right),
@@ -267,8 +269,7 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 	};
 
 	// perform the wrapping on the cube
-	println!("!! Wrapping (for real) from:");
-	dbgpos(sr, sx, sy, sf);
+	println!("!! Wrapping (for real)");
 	match (sf, tf) {
 		(Facing::Down, Facing::Down) => {
 			debug_assert_eq!(sy, sr.y() + REGION_SIZE - 1);
@@ -308,6 +309,7 @@ fn move_on_cube(map: &Map, x: &mut usize, y: &mut usize, facing: &mut Facing) ->
 
 	// if we hit a wall, undo everything
 	if map.rows[*y][*x] == Tile::Wall {
+		println!("-- Wrapped into wall");
 		*x = sx;
 		*y = sy;
 		*facing = sf;
@@ -328,15 +330,15 @@ where
 	let mut facing = Facing::Right;
 
 	for inst in instructions {
-		dbgpos(region(x, y), x, y, facing);
-		println!(" == {inst:?} ==");
+		// dbgpos(region(x, y), x, y, facing);
+		// println!(" == {inst:?} ==");
 		match inst {
 			Instruction::TurnClockwise => facing += 1,
 			Instruction::TurnAnticlockwise => facing += 3,
 			Instruction::Move(steps) => {
 				for _i in 0 .. *steps {
 					if !move_callback(map, &mut x, &mut y, &mut facing) {
-						println!("    (hit wall after {_i} steps)");
+						// println!("    (hit wall after {_i} steps)");
 						break;
 					}
 				}
@@ -353,11 +355,11 @@ fn dbgpos(r: Region, x: usize, y: usize, facing: Facing) {
 	let x = x + 1;
 	let y = y + 1;
 	//println!("=======");
-	println!("Plane: x={x}, y={y}, facing={facing:?}");
+	println!("Plane: y={y}, x={x}, facing={facing:?}");
 	println!(
-		"Cube: {r:?}, δx={}, δy={}, facing={facing:?}",
+		"Cube: {r:?}, δy={}, δx={}, facing={facing:?}",
+		y - r.y(),
 		x - r.x(),
-		y - r.y()
 	);
 }
 
